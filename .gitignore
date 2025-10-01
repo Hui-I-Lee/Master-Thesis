@@ -1,0 +1,36 @@
+# ============================
+# ns-3 specific .gitignore
+# ============================
+
+# Build directories
+build/
+out/
+cmake-build*/
+*.o
+*.so
+*.a
+*.la
+*.lo
+
+# Waf build system files
+.waf*
+.lock-wscript
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+
+# Python cache
+*.pyc
+__pycache__/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.user
+
+# OS generated
+.DS_Store
+Thumbs.db
+
