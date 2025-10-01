@@ -98,7 +98,7 @@ void RxCallback(Ptr<const Packet> packet)
              << "," << delay.GetSeconds()
              << "," << g_currentChannelWidth
              << "," << g_packetSize
-             << "," << g_band << std::endl;
+             << ",b" << g_band << std::endl;
 
     }
 }
@@ -109,7 +109,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     double simTime = 10.0;
     std::string prefix = std::string("ps") + std::to_string(packetSize) +
                      "_w" + std::to_string(channelWidth) +
-                     "_" + std::to_string(band) + "GHz";
+                     "_b" + std::to_string(band) + "GHz";
 
 
     // log 一下
