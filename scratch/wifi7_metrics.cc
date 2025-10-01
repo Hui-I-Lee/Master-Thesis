@@ -59,10 +59,23 @@ private:
 
 NS_LOG_COMPONENT_DEFINE("Wifi7Metrics");
 
+// 全域狀態（在 callback 裡要用）
 static uint32_t g_currentChannelWidth = 0;
 static uint32_t g_packetSize = 0;
+static uint32_t g_band = 0;
 
-static std::ofstream g_latencyCsv("latency.csv");
+// 延遲開檔：第一次寫才開，並確保 header 只寫一次（避免全域 ofstream 的生命週期問題）
+static std::ofstream& LatencyCsv() {
+  static std::ofstream f("latency.csv", std::ios::app);
+  static bool header_written = false;
+  if (!header_written) {
+    f << "time,delay,width,packetSize,band\n";
+    header_written = true;
+  }
+  return f;
+}
+
+// static std::ofstream g_latencyCsv("latency.csv");
 // ================== Packet Sink Callback ==================
 // 讓所有 UdpClient 發出去的封包加上時間戳
 void TxCallback(Ptr<const Packet> packet)
@@ -81,18 +94,23 @@ void RxCallback(Ptr<const Packet> packet)
     if (packet->PeekPacketTag(t))
     {
         Time delay = Simulator::Now() - t.GetTime();
-        g_latencyCsv << Simulator::Now().GetSeconds()
-                     << "," << delay.GetSeconds() << "," << g_currentChannelWidth <<","<<g_packetSize << std::endl;
+        LatencyCsv() << Simulator::Now().GetSeconds()
+             << "," << delay.GetSeconds()
+             << "," << g_currentChannelWidth
+             << "," << g_packetSize
+             << "," << g_band << std::endl;
+
     }
 }
 
 // ================== Function ==================
-void RunExperiment(uint32_t packetSize, uint32_t channelWidth, std::string band, uint32_t nSta, double distance, uint32_t expId, uint32_t totalExps)
+void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, uint32_t nSta, double distance, uint32_t expId, uint32_t totalExps)
 {
     double simTime = 10.0;
-    std::string prefix = "ps" + std::to_string(packetSize) +
-                         "_w" + std::to_string(channelWidth) +
-                         "_b" + band;
+    std::string prefix = std::string("ps") + std::to_string(packetSize) +
+                     "_w" + std::to_string(channelWidth) +
+                     "_" + std::to_string(band) + "GHz";
+
 
     // log 一下
     NS_LOG_INFO("=== RunExperiment start ===");
@@ -104,6 +122,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, std::string band,
                 << ", Distance=" << distance << "m");
     g_currentChannelWidth = channelWidth;
     g_packetSize = packetSize;
+    g_band = band;
 
     NodeContainer apNode;
     apNode.Create(1); // 1 個 AP 
@@ -124,7 +143,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, std::string band,
     每個 channelNumber 對應一個中心頻率（MHz），但它的「實際頻寬」要看 channelWidth
     例如在 5GHz 頻段，channelNumber=42 → 中心頻率 5210 MHz (80 MHz 頻寬情況下)
     */ 
-    if (band == "5") {
+    if (band == 5) {
     if (channelWidth == 20) {
         phy.Set("ChannelSettings", StringValue("{36, 20, BAND_5GHZ, 0}"));
     } else if (channelWidth == 40) {
@@ -138,11 +157,15 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, std::string band,
     }
     }
 
-    else if (band == "6") {
-        // 6 GHz 需要 patch，這裡只是保留接口，跑之前要先升級
-        phy.Set("ChannelSettings", StringValue(
-            "{" + std::to_string(5) + ", " + std::to_string(channelWidth) + ", BAND_6GHZ, 0}"));
+    else if (band == 6) {
+    if (channelWidth == 80) {
+        phy.Set("ChannelSettings", StringValue("{7, 80, BAND_6GHZ, 0}"));   // 80 MHz block @ 6 GHz
+    } else if (channelWidth == 160) {
+        phy.Set("ChannelSettings", StringValue("{15, 160, BAND_6GHZ, 0}")); // 160 MHz block @ 6 GHz
+    } else {
+        NS_ABORT_MSG("Unsupported channel width for 6 GHz: " << channelWidth);
     }
+}
 
     // 在 ns-3，Wi-Fi 是分成三層物件來組：Channel（空中媒介）→ Phy（實體層）→ Mac（MAC 層）。
     // 三者再組成一個 WifiNetDevice 掛在某個 Node 上。
@@ -274,7 +297,7 @@ int main(int argc, char *argv[])
     }
 
     std::vector<uint32_t> Ws = {80, 160};
-    std::vector<std::string> Bs = {"5"}; // 先只跑 5 GHz，6 GHz 需要 patch
+    std::vector<uint32_t> Bs = {5,6}; // 先只跑 5 GHz，6 GHz 需要 patch
 
     uint32_t nSta = 10;    // 10 clients
     double distance = 20.0; // 20m
