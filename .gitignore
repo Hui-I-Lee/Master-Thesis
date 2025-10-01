@@ -1,36 +1,22 @@
-# ============================
-# ns-3 specific .gitignore
-# ============================
-
-# Build directories
+# 編譯輸出
 build/
 out/
-cmake-build*/
 *.o
 *.so
 *.a
-*.la
+*.d
 *.lo
+*.la
+*.al
+*.libs
 
-# Waf build system files
-.waf*
-.lock-wscript
-
-# Logs and temp
+# 暫存檔
 *.log
 *.tmp
 *.swp
+*.bak
 
-# Python cache
-*.pyc
-__pycache__/
-
-# IDE/editor files
-.vscode/
-.idea/
-*.user
-
-# OS generated
-.DS_Store
-Thumbs.db
+# 保留程式碼
+!*.cc
+!*.h
 
