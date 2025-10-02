@@ -10,6 +10,7 @@ set(OLD_GLOB
   "/home/ubuntu/ns-3-dev/scratch/nested-subdir"
   "/home/ubuntu/ns-3-dev/scratch/scratch-simulator.cc"
   "/home/ubuntu/ns-3-dev/scratch/subdir"
+  "/home/ubuntu/ns-3-dev/scratch/wifi7_features.cc"
   "/home/ubuntu/ns-3-dev/scratch/wifi7_metrics.cc"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
@@ -21,6 +22,7 @@ endif()
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "/home/ubuntu/ns-3-dev/scratch/[^.]*.cc")
 set(OLD_GLOB
   "/home/ubuntu/ns-3-dev/scratch/scratch-simulator.cc"
+  "/home/ubuntu/ns-3-dev/scratch/wifi7_features.cc"
   "/home/ubuntu/ns-3-dev/scratch/wifi7_metrics.cc"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
