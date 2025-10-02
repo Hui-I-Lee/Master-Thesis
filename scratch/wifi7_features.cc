@@ -4,7 +4,11 @@
 #include "ns3/mobility-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/applications-module.h"
-#include "ns3/flow-monitor-module.h"
+
+#include <fstream>
+#include <map>
+#include <string>
+#include <climits>
 
 using namespace ns3;
 
@@ -95,7 +99,7 @@ void AssocCallback(std::string context, Mac48Address apAddr) {
     client.SetAttribute("Interval", TimeValue(MilliSeconds(10)));
     client.SetAttribute("PacketSize", UintegerValue(g_packetSize));
     auto app = client.Install(staNode);
-    app.Start(Seconds(Simulator::Now().GetSeconds() + 0.01));
+    app.Start(Simulator::Now() + MilliSeconds(10));
     app.Stop(Seconds(g_simTime));
 
     std::cout << "[CLIENT] STA=" << staId 
@@ -105,78 +109,68 @@ void AssocCallback(std::string context, Mac48Address apAddr) {
   });
 }
 
-// === Snapshot Logging ===
-void LogBssLoad(NodeContainer staNodes, NetDeviceContainer apDevs, Ptr<FlowMonitor> fm) {
-  if (!fm) return;
-  auto stats = fm->GetFlowStats();
+// === Log features (RSSI, MACQ, AP throughput/util) ===
+void LogBssLoad(NodeContainer staNodes,
+                NetDeviceContainer apDevs,
+                ApplicationContainer sinks,
+                NodeContainer apNodes) 
+{
+  double now = Simulator::Now().GetSeconds();
+  std::cout << "[DBG] LogBssLoad t=" << now << std::endl;
 
-  // 聚合 flow 指標（全域）
-  uint64_t rxBytes = 0, rxPkts = 0, loss = 0;
-  double delay_sum = 0.0, jitter_sum = 0.0;
-  for (auto const &kv3 : stats) {
-    const auto &st = kv3.second;
-    // 跳過完全沒有封包的 flow，避免 nullptr 問題
-    if (st.rxPackets == 0 && st.txPackets == 0) continue;
-    rxBytes += st.rxBytes;
-    loss    += st.lostPackets;
-    rxPkts  += st.rxPackets;
-    if (st.rxPackets > 0) delay_sum += st.delaySum.GetSeconds();
-    if (st.rxPackets > 1) jitter_sum += st.jitterSum.GetSeconds();
+  // per-AP throughput
+  std::map<Mac48Address, double> apThrMbps, apUtil;
+  for (uint32_t i = 0; i < sinks.GetN(); i++) {
+    Ptr<UdpServer> udpServer = DynamicCast<UdpServer>(sinks.Get(i));
+    if (!udpServer) continue;
+
+    uint32_t rxPackets = udpServer->GetReceived();
+    double thr = (rxPackets * g_packetSize * 8.0) / (now * 1e6); // Mbps
+
+    Ptr<Node> apNode = apNodes.Get(i);
+    Ptr<WifiNetDevice> apDev = DynamicCast<WifiNetDevice>(apNode->GetDevice(0));
+    Mac48Address apMac = apDev->GetMac()->GetAddress();
+
+    double cap = g_channelWidth * 10.0; // 假設 10 bps/Hz
+    apThrMbps[apMac] = thr;
+    apUtil[apMac] = (cap > 0) ? thr / cap : NAN;
   }
-  double thr_mbps   = (rxBytes * 8.0) / (g_simTime * 1e6);
-  double meanDelay  = (rxPkts > 0) ? (delay_sum / rxPkts) : NAN;
-  double meanJitter = (rxPkts > 1) ? (jitter_sum / (rxPkts - 1)) : NAN;
 
+  // per-STA features
   for (auto const &kv : g_assocMap) {
     uint32_t staId = kv.first;
     Mac48Address apAddr = kv.second;
-
-    // RSSI / MACQ
     double rssi = g_rssiMap.count(staId) ? g_rssiMap[staId] : NAN;
     double macq = g_macqMap.count(staId) ? g_macqMap[staId] : NAN;
 
-    // AP StaCount
     uint32_t staCount = 0;
-    for (auto const &kv2 : g_assocMap) {
-      if (kv2.second == apAddr) staCount++;
-    }
+    for (auto &kv2 : g_assocMap) if (kv2.second == apAddr) staCount++;
 
-    // AP QueueLen (with nullptr protection)
-    uint32_t apNodeId = UINT32_MAX;  // 預設 invalid
+    uint32_t queueLen = 0;
     for (uint32_t j = 0; j < apDevs.GetN(); j++) {
       Ptr<WifiNetDevice> apDev = DynamicCast<WifiNetDevice>(apDevs.Get(j));
-      if (!apDev) continue;  // 保護1: apDev 空
-
+      if (!apDev) continue;
       Ptr<WifiMac> mac = apDev->GetMac();
-     if (!mac) continue;    // 保護2: mac 空
-
-      if (mac->GetAddress() == apAddr) {
+      if (mac && mac->GetAddress() == apAddr) {
         Ptr<Node> apNode = apDev->GetObject<Node>();
-        if (!apNode) continue;  // 保護3: node 空
-
-       apNodeId = apNode->GetId();
+        if (apNode && g_apQueueLen.count(apNode->GetId()))
+          queueLen = g_apQueueLen[apNode->GetId()];
         break;
-     }
-}
+      }
+    }
 
-// 如果找不到 AP，queueLen = 0
-uint32_t queueLen = 0;
-if (apNodeId != UINT32_MAX && g_apQueueLen.count(apNodeId)) {
-  queueLen = g_apQueueLen[apNodeId];
-}
+    double apThr = apThrMbps.count(apAddr) ? apThrMbps[apAddr] : NAN;
+    double apU   = apUtil.count(apAddr) ? apUtil[apAddr] : NAN;
 
-    // === 輸出到 CSV ===
-    g_csv << Simulator::Now().GetSeconds()
+    g_csv << now
           << ",STA=" << staId
           << ",AP=" << apAddr
           << ",RSSI=" << rssi
           << ",MACQ=" << macq
           << ",AP_StaCount=" << staCount
           << ",AP_QueueLen=" << queueLen
-          << ",Throughput=" << thr_mbps
-          << ",Delay=" << meanDelay
-          << ",Jitter=" << meanJitter
-          << ",Loss=" << loss
+          << ",AP_Throughput=" << apThr
+          << ",AP_Util=" << apU
           << ",band=" << g_band
           << ",chWidth=" << g_channelWidth
           << "\n";
@@ -202,7 +196,7 @@ int main(int argc, char *argv[]) {
 
   WifiHelper wifi;
   wifi.SetStandard(WIFI_STANDARD_80211be);
-  wifi.SetRemoteStationManager("ns3::MinstrelHtWifiManager");
+  wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager");
 
   YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
   YansWifiPhyHelper phy;
@@ -280,13 +274,14 @@ int main(int argc, char *argv[]) {
     "/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Mac/$ns3::ApWifiMac/BE_Txop/$ns3::QosTxop/Queue/PacketsInQueue",
     MakeCallback(&ApQueueLenTrace));
 
-  // FlowMonitor
-  FlowMonitorHelper fmHelper;
-  Ptr<FlowMonitor> fm = fmHelper.InstallAll();
-
-  // 每秒記錄一次
-  for (double t = 2; t <= g_simTime; t += 1.0) {
-    Simulator::Schedule(Seconds(t), &LogBssLoad, staNodes, apDevs, fm);
+  // 每秒 snapshot
+  for (double t = 1.0; t <= g_simTime; t += 1.0) {
+    Simulator::Schedule(Seconds(t),
+                        &LogBssLoad,
+                        staNodes,
+                        apDevs,
+                        sinks,
+                        apNodes);
   }
 
   Simulator::Stop(Seconds(g_simTime));
