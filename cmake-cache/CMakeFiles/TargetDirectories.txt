@@ -354,6 +354,7 @@
 /home/ubuntu/ns-3-dev/cmake-cache/examples/CMakeFiles/install/local.dir
 /home/ubuntu/ns-3-dev/cmake-cache/examples/CMakeFiles/install/strip.dir
 /home/ubuntu/ns-3-dev/cmake-cache/scratch/CMakeFiles/scratch_scratch-simulator.dir
+/home/ubuntu/ns-3-dev/cmake-cache/scratch/CMakeFiles/scratch_wifi7_features.dir
 /home/ubuntu/ns-3-dev/cmake-cache/scratch/CMakeFiles/scratch_wifi7_metrics.dir
 /home/ubuntu/ns-3-dev/cmake-cache/scratch/CMakeFiles/scratch_subdir_scratch-subdir.dir
 /home/ubuntu/ns-3-dev/cmake-cache/scratch/CMakeFiles/edit_cache.dir

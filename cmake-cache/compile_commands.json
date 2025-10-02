@@ -4671,6 +4671,11 @@
 },
 {
   "directory": "/home/ubuntu/ns-3-dev/cmake-cache",
+  "command": "/usr/bin/c++ -DHAVE_LIBXML2 -DHAVE_PACKET_H -DNS3_ASSERT_ENABLE -DNS3_BUILD_PROFILE_DEBUG -DNS3_LOG_ENABLE -DPROJECT_SOURCE_PATH=\\\"/home/ubuntu/ns-3-dev\\\" -DRAW_SOCK_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-raw-sock-creator-default\\\" -DTAP_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/tap-bridge/ns3-dev-tap-creator-default\\\" -DTAP_DEV_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-tap-device-creator-default\\\" -D__LINUX__ -I/home/ubuntu/ns-3-dev/build/include -I/usr/include/libxml2 -Os -g -DNDEBUG -fPIE   -fno-semantic-interposition -fdiagnostics-color=always -Wall -Wpedantic -std=c++23 -Winvalid-pch -include /home/ubuntu/ns-3-dev/cmake-cache/CMakeFiles/stdlib_pch_exec.dir/cmake_pch.hxx -o scratch/CMakeFiles/scratch_wifi7_features.dir/wifi7_features.cc.o -c /home/ubuntu/ns-3-dev/scratch/wifi7_features.cc",
+  "file": "/home/ubuntu/ns-3-dev/scratch/wifi7_features.cc"
+},
+{
+  "directory": "/home/ubuntu/ns-3-dev/cmake-cache",
   "command": "/usr/bin/c++ -DHAVE_LIBXML2 -DHAVE_PACKET_H -DNS3_ASSERT_ENABLE -DNS3_BUILD_PROFILE_DEBUG -DNS3_LOG_ENABLE -DPROJECT_SOURCE_PATH=\\\"/home/ubuntu/ns-3-dev\\\" -DRAW_SOCK_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-raw-sock-creator-default\\\" -DTAP_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/tap-bridge/ns3-dev-tap-creator-default\\\" -DTAP_DEV_CREATOR=\\\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-tap-device-creator-default\\\" -D__LINUX__ -I/home/ubuntu/ns-3-dev/build/include -I/usr/include/libxml2 -Os -g -DNDEBUG -fPIE   -fno-semantic-interposition -fdiagnostics-color=always -Wall -Wpedantic -std=c++23 -Winvalid-pch -include /home/ubuntu/ns-3-dev/cmake-cache/CMakeFiles/stdlib_pch_exec.dir/cmake_pch.hxx -o scratch/CMakeFiles/scratch_wifi7_metrics.dir/wifi7_metrics.cc.o -c /home/ubuntu/ns-3-dev/scratch/wifi7_metrics.cc",
   "file": "/home/ubuntu/ns-3-dev/scratch/wifi7_metrics.cc"
 },

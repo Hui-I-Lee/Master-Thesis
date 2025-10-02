@@ -12454,6 +12454,41 @@ build ../build/scratch/ns3-dev-scratch-simulator-default: CXX_EXECUTABLE_LINKER_
   TARGET_PDB = ns3-dev-scratch-simulator-default.dbg
 
 # =============================================================================
+# Object build statements for EXECUTABLE target scratch_wifi7_features
+
+
+#############################################
+# Order-only phony target for scratch_wifi7_features
+
+build cmake_object_order_depends_target_scratch_wifi7_features: phony || cmake_object_order_depends_target_antenna cmake_object_order_depends_target_aodv cmake_object_order_depends_target_applications cmake_object_order_depends_target_bridge cmake_object_order_depends_target_buildings cmake_object_order_depends_target_config-store cmake_object_order_depends_target_core cmake_object_order_depends_target_csma cmake_object_order_depends_target_csma-layout cmake_object_order_depends_target_dsdv cmake_object_order_depends_target_dsr cmake_object_order_depends_target_energy cmake_object_order_depends_target_fd-net-device cmake_object_order_depends_target_flow-monitor cmake_object_order_depends_target_internet cmake_object_order_depends_target_internet-apps cmake_object_order_depends_target_lr-wpan cmake_object_order_depends_target_lte cmake_object_order_depends_target_mesh cmake_object_order_depends_target_mobility cmake_object_order_depends_target_netanim cmake_object_order_depends_target_network cmake_object_order_depends_target_nix-vector-routing cmake_object_order_depends_target_olsr cmake_object_order_depends_target_point-to-point cmake_object_order_depends_target_point-to-point-layout cmake_object_order_depends_target_propagation cmake_object_order_depends_target_sixlowpan cmake_object_order_depends_target_spectrum cmake_object_order_depends_target_stats cmake_object_order_depends_target_tap-bridge cmake_object_order_depends_target_topology-read cmake_object_order_depends_target_traffic-control cmake_object_order_depends_target_uan cmake_object_order_depends_target_virtual-net-device cmake_object_order_depends_target_wifi cmake_object_order_depends_target_zigbee ns3-dev-stdlib_pch_exec-default
+
+build scratch/CMakeFiles/scratch_wifi7_features.dir/wifi7_features.cc.o: CXX_COMPILER__scratch_wifi7_features_default /home/ubuntu/ns-3-dev/scratch/wifi7_features.cc | CMakeFiles/stdlib_pch_exec.dir/cmake_pch.hxx CMakeFiles/stdlib_pch_exec.dir/cmake_pch.hxx.gch || cmake_object_order_depends_target_scratch_wifi7_features
+  DEFINES = -DHAVE_LIBXML2 -DHAVE_PACKET_H -DNS3_ASSERT_ENABLE -DNS3_BUILD_PROFILE_DEBUG -DNS3_LOG_ENABLE -DPROJECT_SOURCE_PATH=\"/home/ubuntu/ns-3-dev\" -DRAW_SOCK_CREATOR=\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-raw-sock-creator-default\" -DTAP_CREATOR=\"/home/ubuntu/ns-3-dev/build/src/tap-bridge/ns3-dev-tap-creator-default\" -DTAP_DEV_CREATOR=\"/home/ubuntu/ns-3-dev/build/src/fd-net-device/ns3-dev-tap-device-creator-default\" -D__LINUX__
+  DEP_FILE = scratch/CMakeFiles/scratch_wifi7_features.dir/wifi7_features.cc.o.d
+  FLAGS = -Os -g -DNDEBUG -fPIE   -fno-semantic-interposition -fdiagnostics-color=always -Wall -Wpedantic -std=c++23 -Winvalid-pch -include /home/ubuntu/ns-3-dev/cmake-cache/CMakeFiles/stdlib_pch_exec.dir/cmake_pch.hxx
+  INCLUDES = -I/home/ubuntu/ns-3-dev/build/include -I/usr/include/libxml2
+  OBJECT_DIR = scratch/CMakeFiles/scratch_wifi7_features.dir
+  OBJECT_FILE_DIR = scratch/CMakeFiles/scratch_wifi7_features.dir
+
+
+# =============================================================================
+# Link build statements for EXECUTABLE target scratch_wifi7_features
+
+
+#############################################
+# Link the executable ../build/scratch/ns3-dev-wifi7_features-default
+
+build ../build/scratch/ns3-dev-wifi7_features-default: CXX_EXECUTABLE_LINKER__scratch_wifi7_features_default scratch/CMakeFiles/scratch_wifi7_features.dir/wifi7_features.cc.o | /usr/lib/x86_64-linux-gnu/libxml2.so || ../build/lib/libns3-dev-antenna-default.so ../build/lib/libns3-dev-aodv-default.so ../build/lib/libns3-dev-applications-default.so ../build/lib/libns3-dev-bridge-default.so ../build/lib/libns3-dev-buildings-default.so ../build/lib/libns3-dev-config-store-default.so ../build/lib/libns3-dev-core-default.so ../build/lib/libns3-dev-csma-default.so ../build/lib/libns3-dev-csma-layout-default.so ../build/lib/libns3-dev-dsdv-default.so ../build/lib/libns3-dev-dsr-default.so ../build/lib/libns3-dev-energy-default.so ../build/lib/libns3-dev-fd-net-device-default.so ../build/lib/libns3-dev-flow-monitor-default.so ../build/lib/libns3-dev-internet-apps-default.so ../build/lib/libns3-dev-internet-default.so ../build/lib/libns3-dev-lr-wpan-default.so ../build/lib/libns3-dev-lte-default.so ../build/lib/libns3-dev-mesh-default.so ../build/lib/libns3-dev-mobility-default.so ../build/lib/libns3-dev-netanim-default.so ../build/lib/libns3-dev-network-default.so ../build/lib/libns3-dev-nix-vector-routing-default.so ../build/lib/libns3-dev-olsr-default.so ../build/lib/libns3-dev-point-to-point-default.so ../build/lib/libns3-dev-point-to-point-layout-default.so ../build/lib/libns3-dev-propagation-default.so ../build/lib/libns3-dev-sixlowpan-default.so ../build/lib/libns3-dev-spectrum-default.so ../build/lib/libns3-dev-stats-default.so ../build/lib/libns3-dev-tap-bridge-default.so ../build/lib/libns3-dev-topology-read-default.so ../build/lib/libns3-dev-traffic-control-default.so ../build/lib/libns3-dev-uan-default.so ../build/lib/libns3-dev-virtual-net-device-default.so ../build/lib/libns3-dev-wifi-default.so ../build/lib/libns3-dev-zigbee-default.so ns3-dev-stdlib_pch_exec-default ../build/lib/libns3-dev-zigbee-default.so ../build/lib/libns3-dev-topology-read-default.so ../build/lib/libns3-dev-tap-bridge-default.so ../build/lib/libns3-dev-sixlowpan-default.so ../build/lib/libns3-dev-point-to-point-layout-default.so ../build/lib/libns3-dev-olsr-default.so ../build/lib/libns3-dev-nix-vector-routing-default.so ../build/lib/libns3-dev-netanim-default.so ../build/lib/libns3-dev-lte-default.so ../build/lib/libns3-dev-lr-wpan-default.so ../build/lib/libns3-dev-flow-monitor-default.so ../build/lib/libns3-dev-fd-net-device-default.so ../build/lib/libns3-dev-dsr-default.so ../build/lib/libns3-dev-dsdv-default.so ../build/lib/libns3-dev-csma-layout-default.so ../build/lib/libns3-dev-csma-default.so ../build/lib/libns3-dev-config-store-default.so ../build/lib/libns3-dev-buildings-default.so ../build/lib/libns3-dev-aodv-default.so ../build/lib/libns3-dev-uan-default.so ../build/lib/libns3-dev-virtual-net-device-default.so ../build/lib/libns3-dev-mesh-default.so ../build/lib/libns3-dev-point-to-point-default.so ../build/lib/libns3-dev-wifi-default.so ../build/lib/libns3-dev-spectrum-default.so ../build/lib/libns3-dev-propagation-default.so ../build/lib/libns3-dev-mobility-default.so ../build/lib/libns3-dev-antenna-default.so ../build/lib/libns3-dev-energy-default.so ../build/lib/libns3-dev-internet-apps-default.so ../build/lib/libns3-dev-applications-default.so ../build/lib/libns3-dev-internet-default.so ../build/lib/libns3-dev-traffic-control-default.so ../build/lib/libns3-dev-bridge-default.so ../build/lib/libns3-dev-network-default.so ../build/lib/libns3-dev-stats-default.so ../build/lib/libns3-dev-core-default.so
+  FLAGS = -Os -g -DNDEBUG
+  LINK_LIBRARIES = -Wl,-rpath,/home/ubuntu/ns-3-dev/build/lib  -Wl,--no-as-needed  ../build/lib/libns3-dev-zigbee-default.so  ../build/lib/libns3-dev-topology-read-default.so  ../build/lib/libns3-dev-tap-bridge-default.so  ../build/lib/libns3-dev-sixlowpan-default.so  ../build/lib/libns3-dev-point-to-point-layout-default.so  ../build/lib/libns3-dev-olsr-default.so  ../build/lib/libns3-dev-nix-vector-routing-default.so  ../build/lib/libns3-dev-netanim-default.so  ../build/lib/libns3-dev-lte-default.so  ../build/lib/libns3-dev-lr-wpan-default.so  ../build/lib/libns3-dev-flow-monitor-default.so  ../build/lib/libns3-dev-fd-net-device-default.so  ../build/lib/libns3-dev-dsr-default.so  ../build/lib/libns3-dev-dsdv-default.so  ../build/lib/libns3-dev-csma-layout-default.so  ../build/lib/libns3-dev-csma-default.so  ../build/lib/libns3-dev-config-store-default.so  ../build/lib/libns3-dev-buildings-default.so  ../build/lib/libns3-dev-aodv-default.so  -Wl,--as-needed  ../build/lib/libns3-dev-uan-default.so  ../build/lib/libns3-dev-virtual-net-device-default.so  /usr/lib/x86_64-linux-gnu/libxml2.so  ../build/lib/libns3-dev-mesh-default.so  ../build/lib/libns3-dev-point-to-point-default.so  ../build/lib/libns3-dev-wifi-default.so  ../build/lib/libns3-dev-spectrum-default.so  ../build/lib/libns3-dev-propagation-default.so  ../build/lib/libns3-dev-mobility-default.so  ../build/lib/libns3-dev-antenna-default.so  ../build/lib/libns3-dev-energy-default.so  ../build/lib/libns3-dev-internet-apps-default.so  ../build/lib/libns3-dev-applications-default.so  ../build/lib/libns3-dev-internet-default.so  ../build/lib/libns3-dev-traffic-control-default.so  ../build/lib/libns3-dev-bridge-default.so  ../build/lib/libns3-dev-network-default.so  ../build/lib/libns3-dev-stats-default.so  ../build/lib/libns3-dev-core-default.so  -Wl,--no-as-needed  -Wl,--as-needed
+  LINK_PATH = -L/home/ubuntu/ns-3-dev/build/lib
+  OBJECT_DIR = scratch/CMakeFiles/scratch_wifi7_features.dir
+  POST_BUILD = :
+  PRE_LINK = :
+  TARGET_FILE = ../build/scratch/ns3-dev-wifi7_features-default
+  TARGET_PDB = ns3-dev-wifi7_features-default.dbg
+
+# =============================================================================
 # Object build statements for EXECUTABLE target scratch_wifi7_metrics
 
 
@@ -13093,6 +13128,8 @@ build ns3-dev-tap-creator-default: phony ../build/src/tap-bridge/ns3-dev-tap-cre
 
 build ns3-dev-tap-device-creator-default: phony ../build/src/fd-net-device/ns3-dev-tap-device-creator-default
 
+build ns3-dev-wifi7_features-default: phony ../build/scratch/ns3-dev-wifi7_features-default
+
 build ns3-dev-wifi7_metrics-default: phony ../build/scratch/ns3-dev-wifi7_metrics-default
 
 build olsr: phony ../build/lib/libns3-dev-olsr-default.so
@@ -13116,6 +13153,8 @@ build scratch_nested-subdir_scratch-nested-subdir-executable: phony ../build/scr
 build scratch_scratch-simulator: phony ../build/scratch/ns3-dev-scratch-simulator-default
 
 build scratch_subdir_scratch-subdir: phony ../build/scratch/subdir/ns3-dev-scratch-subdir-default
+
+build scratch_wifi7_features: phony ../build/scratch/ns3-dev-wifi7_features-default
 
 build scratch_wifi7_metrics: phony ../build/scratch/ns3-dev-wifi7_metrics-default
 
@@ -13173,7 +13212,7 @@ build examples/all: phony
 #############################################
 # Folder: /home/ubuntu/ns-3-dev/cmake-cache/scratch
 
-build scratch/all: phony ../build/scratch/ns3-dev-scratch-simulator-default ../build/scratch/ns3-dev-wifi7_metrics-default ../build/scratch/subdir/ns3-dev-scratch-subdir-default scratch/nested-subdir/all
+build scratch/all: phony ../build/scratch/ns3-dev-scratch-simulator-default ../build/scratch/ns3-dev-wifi7_features-default ../build/scratch/ns3-dev-wifi7_metrics-default ../build/scratch/subdir/ns3-dev-scratch-subdir-default scratch/nested-subdir/all
 
 # =============================================================================
 
