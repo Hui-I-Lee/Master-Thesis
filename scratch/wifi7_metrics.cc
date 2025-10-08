@@ -179,7 +179,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     // STA
     mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(true));
     NetDeviceContainer staDevs = wifi.Install(phy, mac, staNodes);
-
+/*
     // Mobility
     // ns-3 的 Node 需要掛一個 MobilityModel 才有位置可算 RSSI 路徑損耗：
     MobilityHelper mobility;
@@ -191,6 +191,25 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     for (uint32_t i = 0; i < nSta; i++) {
         staNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(Vector(distance, i, 1));
     }
+*/
+    // 先把distance設成固定
+    // Mobility
+    MobilityHelper mobility;
+    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    mobility.Install(apNode);
+    mobility.Install(staNodes);
+
+    // AP 在圓心
+    apNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(0.0, 0.0, 1.0));
+
+    // STA 均勻分佈在半徑為 distance 的圓上
+    for (uint32_t i = 0; i < nSta; i++) {
+      double angle = 2 * M_PI * i / nSta;  // 每個 STA 間隔角度
+      double x = distance * std::cos(angle);
+      double y = distance * std::sin(angle);
+      staNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(Vector(x, y, 1.0));
+    }
+
 
     // Internet
     InternetStackHelper stack; // InternetStackHelper: 在每個 Node 上裝 TCP/UDP/IPv4/ARP/路由等協定。
@@ -216,23 +235,36 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
 
     // 每個 STA 跟 AP 通 (uplink)：持續送資料到 AP:5000
     // 整個系統（全部 STA 加總）在應用層「嘗試」送出的總速率
-    double targetRateMbps = 200.0;  // 總流量。接近塞滿 channel，觀察 drop rate, bandwidth
+    double targetRateMbps = 100.0; //200.0 總流量。接近塞滿 channel，觀察 drop rate, bandwidth
     // 把總速率平均分給每個 STA，所以每個 STA 都會盡量以這個速率送
     double perStaRateMbps = targetRateMbps / nSta;
 
     for (uint32_t i = 0; i < nSta; i++) {
-        UdpClientHelper client(apIf.GetAddress(0), 5000); // 目標 IP = AP 的 IP, 目標 port = 5000
-        client.SetAttribute("MaxPackets", UintegerValue(0));  // 無限發
+        UdpClientHelper client(apIf.GetAddress(0), 5000); // 目標IP => AP 的 IP, 目標 port = 5000
 
-         // 根據封包大小 & STA 分配速率，自動算 interval （每個 STA 的發包間隔）
+        // client.SetAttribute() ：設定「樣板」參數，告訴工廠等一下建立的 UdpClient 要有這些屬性
+        client.SetAttribute("MaxPackets", UintegerValue(0));  // 代表持續發送，不會停
+        /*根據封包大小和目標速率自動算間隔。
+        例如：
+        STA 目標速率：20 Mbps
+        封包大小：1500 Bytes = 12,000 bits
+        那 packetsPerSecond = 20e6 / 12e3 = 1666.7 packets/s
+        → Interval ≈ 0.0006 s（每 0.6 毫秒發一包）
+        這樣每個 STA 發送的平均速率就會接近 20 Mbps。*/
         double packetsPerSecond = (perStaRateMbps * 1e6) / (packetSize * 8.0); //pps 每秒要送幾包
         double intervalSec = 1.0 / packetsPerSecond;
         client.SetAttribute("Interval", TimeValue(Seconds(intervalSec))); 
-
         client.SetAttribute("PacketSize", UintegerValue(packetSize)); // 1~10 MTU
+
+        // client.Install(staNodes.Get(i)): 真正創建一個新的 UdpClient 實體，並把上面設定的屬性套進去
         ApplicationContainer app = client.Install(staNodes.Get(i));
-        app.Start(Seconds(1.0));
+        app.Start(Seconds(1.0)); // 每個 STA 上的應用程式，都會在模擬時間 1.0 秒時開始運作，它只是「逐一設定」
         app.Stop(Seconds(simTime));
+
+        /*
+        每個 STA 在模擬時間 1.0 秒時都會開始工作；
+        每個 STA 都會以自己的 Interval 參數為週期，不斷地發送封包給 AP。
+        */
     }
 
     // 綁定 Tx trace (所有 UdpClient)
@@ -251,7 +283,9 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     Ptr<FlowMonitor> monitor = fmHelper.InstallAll();
 
     Simulator::Stop(Seconds(simTime));
-    Simulator::Run();
+    Simulator::Run(); 
+    //模擬器啟動 (Simulator::Run()) 後，ns-3 核心的 event queue 會同時觸發這些「在 1.0 秒開始的事件」，
+    //就是上面幾行的 for loop
 
     // 收集結果
     monitor->CheckForLostPackets();
@@ -291,10 +325,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
 int main(int argc, char *argv[])
 {
     LogComponentEnable("Wifi7Metrics", LOG_LEVEL_INFO);
-    std::vector<uint32_t> Ps;
-    for (uint32_t i = 1; i <= 10; i++) {
-        Ps.push_back(i * 1500); // 1~10 MTU
-    }
+    std::vector<uint32_t> Ps = {512, 1500, 4096, 8192, 16384, 32768, 65507};
 
     std::vector<uint32_t> Ws = {80, 160};
     std::vector<uint32_t> Bs = {5,6}; // 先只跑 5 GHz，6 GHz 需要 patch
@@ -304,6 +335,15 @@ int main(int argc, char *argv[])
 
     uint32_t expId = 0;
     uint32_t totalExps = Ps.size() * Ws.size() * Bs.size();
+
+    /*
+    一次 RunExperiment() 做的事：
+    建立 1 個 AP
+    建立 10 個 STA
+    在每個 STA 上 Install() 一個 UDP client
+    每個 client 的封包大小相同（這次的 packetSize）
+    同時發送到 AP
+    */
 
     for (auto ps : Ps) {
         for (auto w : Ws) {
