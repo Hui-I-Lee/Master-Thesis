@@ -1,24 +1,25 @@
 import pandas as pd
+lat = pd.read_csv("latency.csv")
+print("✅ 檔案筆數:", len(lat))
+print(lat.head())
 
-# 讀取 summary.csv
-summary = pd.read_csv("summary.csv", header=None)
-summary.columns = ["info", "bandwidth", "dropRate"]
+# 嘗試檢查主要欄位
+print("\n📊 欄位資訊:")
+print(lat.dtypes)
 
-# 先去除可能的空白/換行
-summary["info"] = summary["info"].str.strip()
+print("\n📦 band 唯一值:", lat["band"].unique()[:10])
 
-print("=== unique info (前幾個) ===")
-print(summary["info"].unique()[:10])
+# 測試篩選其中一組
+subset = lat.query("width == 80 and band == 'b5'")
+print("\n🧩 width=80, band=b5 筆數:", len(subset))
+print(subset.head())
 
-# 抓 Band，並先不轉 int，檢查抓到什麼
-summary["Band_raw"] = summary["info"].str.extract(r'_b(\d+)$')[0]
-print("=== Band_raw ===")
-print(summary["Band_raw"].unique()[:10])
-
-# 再轉 int（確保沒有 NaN）
-summary = summary.dropna(subset=["Band_raw"])
-summary["Band"] = summary["Band_raw"].astype(int)
-
-print("=== 前 5 筆解析後 ===")
-print(summary.head())
+if len(subset) > 0:
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    sns.ecdfplot(data=subset, x="delay", hue="packetSize")
+    plt.xlim(0, subset["delay"].quantile(0.99))
+    plt.show()
+else:
+    print("⚠️ subset 為空，圖不可能有線！")
 
