@@ -256,6 +256,20 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
         client.SetAttribute("Interval", TimeValue(Seconds(intervalSec))); 
         client.SetAttribute("PacketSize", UintegerValue(packetSize)); // 1~10 MTU
 
+        // 加上 publish rate logging
+        static std::ofstream pub("publish_rate.csv", std::ios::app);
+        static bool header_written = false;
+        if (!header_written) {
+            pub << "expId,staId,packetSize,width,band,perStaRateMbps,publishRate_pps,interval_sec\n";
+            header_written = true;
+        }
+        pub << expId << "," << i << "," << packetSize << "," << channelWidth << "," << band << ","
+        << perStaRateMbps << "," << packetsPerSecond << "," << intervalSec << "\n";
+
+        // Log 一下
+        NS_LOG_INFO("STA " << i << " publish rate = " << packetsPerSecond
+                 << " pps (interval = " << intervalSec << " s)");
+
         // client.Install(staNodes.Get(i)): 真正創建一個新的 UdpClient 實體，並把上面設定的屬性套進去
         ApplicationContainer app = client.Install(staNodes.Get(i));
         app.Start(Seconds(1.0)); // 每個 STA 上的應用程式，都會在模擬時間 1.0 秒時開始運作，它只是「逐一設定」
@@ -314,8 +328,10 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     }
     summary.close();
 
-    // (選擇性) 輸出到 XML 檔，方便 Python/Gnuplot 分析 latency 分布
-    monitor->SerializeToXmlFile("flowmon_" + prefix + ".xml", true, true);
+    // ====== Save flowmon files to a clean folder ======
+    std::string folder = "flowmon_results/";
+    std::string filename = folder + "flowmon_" + prefix + ".xml";
+    monitor->SerializeToXmlFile(filename, true, true);
 
     Simulator::Destroy();
     NS_LOG_INFO("[Experiment " << expId << "/" << totalExps << "] End");

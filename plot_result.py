@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import numpy as np
 
 # ------------------ 設定輸出資料夾 ------------------
 BASE_DIR = os.path.expanduser("~/ns-3-dev")
@@ -12,101 +13,72 @@ os.makedirs(IMG_DIR, exist_ok=True)
 summary = pd.read_csv("summary.csv", header=None)
 summary.columns = ["info", "bandwidth", "dropRate"]
 
-# 解析 info，例如 ps1500_w80_b5GHz
-summary["PacketSize"] = summary["info"].str.extract(r'ps(\d+)_')[0].astype(int)
-summary["Width"] = summary["info"].str.extract(r'_w(\d+)_')[0].astype(int)
-summary["Band"] = summary["info"].str.extract(r'_b(\d+)GHz')[0].astype(int)
-
-summary["Bandwidth(Mbps)"] = summary["bandwidth"].str.split("=").str[1].astype(float)
-summary["DropRate"] = summary["dropRate"].str.split("=").str[1].astype(float)
-
-# Label 欄位
-summary["WidthLabel"] = summary["Width"].astype(str) + " MHz"
-summary["BandLabel"] = summary["Band"].astype(str) + " GHz"
-summary["Config"] = summary["BandLabel"] + " / " + summary["WidthLabel"]
-
-# ------------------ 畫 bandwidth ------------------
-g = sns.catplot(
-    data=summary,
-    x="PacketSize", y="Bandwidth(Mbps)",
-    hue="WidthLabel",
-    col="BandLabel", col_wrap=2,
-    kind="bar", height=5, aspect=1.2
-)
-g.set_axis_labels("Packet Size (bytes)", "Bandwidth (Mbps)")
-g.set_titles("Band = {col_name}")
-plt.tight_layout()
-plt.savefig(os.path.join(IMG_DIR, "bandwidth_by_band.png"))
-plt.close()
-
-# ------------------ 畫 drop rate ------------------
-g = sns.catplot(
-    data=summary,
-    x="PacketSize", y="DropRate",
-    hue="WidthLabel",
-    col="BandLabel", col_wrap=2,
-    kind="bar", height=5, aspect=1.2
-)
-g.set_axis_labels("Packet Size (bytes)", "Drop Rate")
-g.set_titles("Band = {col_name}")
-plt.tight_layout()
-plt.savefig(os.path.join(IMG_DIR, "drop_rate_by_band.png"))
-plt.close()
+summary["packetSize"] = summary["info"].str.extract(r'ps(\d+)_')[0].astype(int)
+summary["width"] = summary["info"].str.extract(r'_w(\d+)_')[0].astype(int)
+summary["band"] = summary["info"].str.extract(r'_b(\d+)GHz')[0].astype(int)
+summary["throughput"] = summary["bandwidth"].str.split("=").str[1].astype(float)
+summary["dropRate"] = summary["dropRate"].str.split("=").str[1].astype(float)
+summary_clean = summary[["packetSize", "width", "band", "throughput", "dropRate"]]
 
 # ================== 讀取 latency.csv ==================
-latency = pd.read_csv("latency.csv")
-latency.columns = ["time", "latency", "width", "packetSize", "band_raw"]
+lat = pd.read_csv("latency.csv", low_memory=False)
+if len(lat) > 200000:
+    lat = lat.sample(frac=0.05, random_state=42)
+    print(f"⚡ Using 5% sample ({len(lat)} rows) for faster computation")
 
-# 轉數值
-latency["latency_ms"] = latency["latency"] * 1000
-latency["WidthLabel"] = latency["width"].astype(str) + " MHz"
-latency["Band"] = latency["band_raw"].str.extract(r'b(\d+)')[0].astype(int)
-latency["BandLabel"] = latency["Band"].astype(str) + " GHz"
-latency["Config"] = latency["BandLabel"] + " / " + latency["WidthLabel"]
+# ---- 強制轉型 ----
+lat["delay"] = pd.to_numeric(lat["delay"], errors="coerce")  # 非數字變 NaN
+lat = lat.dropna(subset=["delay"])                           # 丟掉壞掉的 row
+lat["latency_ms"] = lat["delay"].astype(float) * 1000
 
-# ================== Latency 分析三件套 ==================
-# 1. Latency vs Time (每個 PacketSize 一張圖)
-for ps, df in latency.groupby("packetSize"):
-    plt.figure(figsize=(10,6))
-    sns.scatterplot(
-        data=df,
-        x="time",
-        y="latency_ms",
-        hue="Config",
-        alpha=0.5,
-        s=10
-    )
-    plt.title(f"Latency vs Time (PacketSize={ps})")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Latency (ms)")
-    plt.ylim(0, 20)
-    plt.legend(title="Config")
+lat["band"] = lat["band"].astype(str).str.strip()
+lat = lat[lat["band"].str.startswith("b", na=False)]
+lat["band_num"] = lat["band"].str.extract(r"b(\d+)")[0].astype(int)
+
+# ✅ 改用 numpy percentile（快 & 不爆記憶體）
+def latency_stats_fast(df):
+    vals = df["latency_ms"].to_numpy()
+    return pd.Series({
+        "p50": np.percentile(vals, 50),
+        "p90": np.percentile(vals, 90),
+        "p99": np.percentile(vals, 99),
+        "mean": vals.mean(),
+        "std": vals.std(),
+        "le10ms": np.mean(vals <= 10),
+    })
+
+lat_stats = (
+    lat.groupby(["band_num", "width", "packetSize"], group_keys=False)
+       .apply(latency_stats_fast)
+       .reset_index()
+)
+
+lat_stats.to_csv(os.path.join(IMG_DIR, "latency_summary.csv"), index=False)
+
+# ================== Heatmaps ==================
+def plot_heat(df, value, title, fname, fmt=".1f", cmap="mako"):
+    pv = df.pivot_table(index="packetSize", columns="width", values=value, aggfunc="mean")
+    plt.figure(figsize=(6, 4))
+    sns.heatmap(pv, annot=True, fmt=fmt, cmap=cmap)
+    plt.title(title)
+    plt.xlabel("width (MHz)")
+    plt.ylabel("packetSize (bytes)")
     plt.tight_layout()
-    plt.savefig(os.path.join(IMG_DIR, f"latency_vs_time_ps{ps}.png"))
+    plt.savefig(os.path.join(IMG_DIR, fname))
     plt.close()
 
-# 2. Latency Histogram (FacetGrid by Band × Width)
-for (band, width, ps), df_bwp in latency.groupby(["BandLabel", "WidthLabel", "packetSize"]):
-    plt.figure(figsize=(8,5))
-    sns.histplot(df_bwp, x="latency_ms", bins=100, color="steelblue", alpha=0.7)
-    plt.title(f"Latency Distribution ({band}, {width}, PacketSize={ps})")
-    plt.xlabel("Latency (ms)")
-    plt.ylabel("Count")
-    plt.xlim(0, 200)  # 這裡可以依需求調整，例如 0~200ms
-    plt.tight_layout()
-    plt.savefig(os.path.join(IMG_DIR, f"latency_hist_{band}_{width}_ps{ps}.png"))
-    plt.close()
+for band in [5, 6]:
+    df_band = summary_clean.query("band == @band")
+    lat_band = lat_stats.query("band_num == @band")
 
-# 3. Latency CDF
-plt.figure(figsize=(10,6))
-sns.ecdfplot(data=latency, x="latency_ms", hue="Config", linewidth=2)
-plt.title("Latency CDF by Band and Width")
-plt.xlabel("Latency (ms)")
-plt.ylabel("CDF")
-plt.xlim(0, 20)
-plt.legend(title="Config")
-plt.tight_layout()
-plt.savefig(os.path.join(IMG_DIR, "latency_cdf_by_band_width.png"))
-plt.close()
+    plot_heat(df_band, "throughput", f"Throughput (Mbps) @{band}GHz",
+              f"heat_thr_ps_width_{band}g.png", fmt=".0f")
+    plot_heat(df_band, "dropRate", f"DropRate @{band}GHz",
+              f"heat_drop_ps_width_{band}g.png", fmt=".2f")
+    for q in ["p50", "p99"]:  # 🚀 暫時只畫 2 張
+        plot_heat(lat_band, q, f"{q} Latency (ms) @{band}GHz",
+                  f"heat_{q}_ps_width_{band}g.png", fmt=".1f")
+    plot_heat(lat_band, "le10ms", f"≤10ms Ratio @{band}GHz",
+              f"heat_le10ms_ps_width_{band}g.png", fmt=".0%")
 
-print("bandwidth_by_band.png, drop_rate_by_band.png, latency_vs_time_ps*.png, latency_hist_by_band_width.png, latency_cdf_by_band_width.png")
+print("Done: saved summary_clean.csv, latency_summary.csv, and all heatmaps (sampled).")
