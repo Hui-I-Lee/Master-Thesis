@@ -266,14 +266,25 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
         pub << expId << "," << i << "," << packetSize << "," << channelWidth << "," << band << ","
         << perStaRateMbps << "," << packetsPerSecond << "," << intervalSec << "\n";
 
-        // Log 一下
-        NS_LOG_INFO("STA " << i << " publish rate = " << packetsPerSecond
-                 << " pps (interval = " << intervalSec << " s)");
+        // --- 為 StartTime 加上高斯分佈 ---
+        // μ = 1.0 秒 (平均在 1s 時開始), σ = 0.2 秒 (抖動幅度)
+        double mean = 1.0;
+        double stddev = 0.2;
+        Ptr<NormalRandomVariable> startJitter = CreateObject<NormalRandomVariable>();
+        startJitter->SetAttribute("Mean", DoubleValue(mean));
+        startJitter->SetAttribute("Variance", DoubleValue(stddev * stddev)); // σ^2
+        double startTime = std::max(0.0, startJitter->GetValue()); // 避免負時間
+        
 
         // client.Install(staNodes.Get(i)): 真正創建一個新的 UdpClient 實體，並把上面設定的屬性套進去
         ApplicationContainer app = client.Install(staNodes.Get(i));
-        app.Start(Seconds(1.0)); // 每個 STA 上的應用程式，都會在模擬時間 1.0 秒時開始運作，它只是「逐一設定」
+        app.Start(Seconds(startTime)); // 每個 STA 上的應用程式，都會在模擬時間 1.0 秒時開始運作，它只是「逐一設定」
         app.Stop(Seconds(simTime));
+
+        // log 一下
+        NS_LOG_INFO("STA " << i << " start time = " << startTime
+                       << " s, publish rate = " << packetsPerSecond
+                       << " pps (interval = " << intervalSec << " s)");
 
         /*
         每個 STA 在模擬時間 1.0 秒時都會開始工作；
@@ -322,8 +333,8 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
                 << ",Bandwidth=" << thr_mbps
                 << ",DropRate=" << dropRate
                 << std::endl;
-        NS_LOG_INFO("[Experiment " << expId << "] Result: "
-                    << " Bandwidth=" << thr_mbps << " Mbps"
+        NS_LOG_INFO("[Experiment " << expId << "] "
+                    << "Bandwidth=" << thr_mbps << "Mbps, "
                     << " DropRate=" << dropRate);
     }
     summary.close();
