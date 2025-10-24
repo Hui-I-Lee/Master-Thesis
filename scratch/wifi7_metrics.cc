@@ -5,6 +5,7 @@
 #include "ns3/wifi-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/flow-monitor-module.h"
+#include "ns3/tap-bridge-module.h" // For TapBridge
 
 using namespace ns3;
 
@@ -221,6 +222,26 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
     address.SetBase("10.1.0.0", "255.255.255.0");
     Ipv4InterfaceContainer apIf = address.Assign(apDev);    // 給 AP 的 Wi-Fi 裝置配 IP
     Ipv4InterfaceContainer staIf = address.Assign(staDevs); // 給所有 STA 配 IP
+
+    // ------------------------------------------------------------
+    // 新增 TapBridge: 讓 ns-3 Node 接上 ROS2 容器
+    // ------------------------------------------------------------
+    /*  tapAp：建立一座橋，讓 AP node 的網路裝置 (apDev.Get(0)) 連到 真實世界裡的一張虛擬網卡 (tap-ap)。
+        這張卡會在 host（或 ROS 2 listener container）上出現。
+        所以 AP node = ns-3 listener = ROS 2 listener container*/
+    TapBridgeHelper tapAp;
+    tapAp.SetAttribute("Mode", StringValue("UseLocal"));   
+    tapAp.SetAttribute("DeviceName", StringValue("tap-ap"));
+    tapAp.Install(apNode.Get(0), apDev.Get(0));
+
+    for (uint32_t i = 0; i < nSta; ++i)
+    {
+        std::string devName = "tap-sta" + std::to_string(i);
+        TapBridgeHelper tapSta;
+        tapSta.SetAttribute("Mode", StringValue("UseLocal"));
+        tapSta.SetAttribute("DeviceName", StringValue(devName));
+        tapSta.Install(staNodes.Get(i), staDevs.Get(i));
+    }
 
     // Traffic: each STA -> AP
     // 在 AP 上跑一個 UDP Server 監聽 port 5000
