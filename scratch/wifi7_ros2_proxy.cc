@@ -7,10 +7,17 @@
 #include "ns3/flow-monitor-module.h"
 
 using namespace ns3;
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+
+
 NS_LOG_COMPONENT_DEFINE("Wifi7Proxy");
-// ==========================================================
-// Timestamp Tag
-// ==========================================================
+
 class MyTimestampTag : public Tag
 {
 public:
@@ -43,9 +50,7 @@ private:
   Time m_time;
 };
 
-// ==========================================================
 // 全域記錄檔
-// ==========================================================
 static std::ofstream &LatencyCsv()
 {
   static std::ofstream f("latency.csv", std::ios::app);
@@ -61,111 +66,234 @@ static std::ofstream &LatencyCsv()
 static uint32_t g_currentChannelWidth = 0;
 static uint32_t g_packetSize = 0;
 static uint32_t g_band = 0;
-
-// ==========================================================
-// Ros2 Proxy App
-// 在一個節點上，接一個本地 socket（給 ROS2 方向）＋一個 ns-3 socket（給模擬網路方向），
-// 把封包在兩個世界之間轉送，並且打上 ns-3 模擬時間戳做延遲統計
-// ==========================================================
-// 從 ROS2 到 ns-3 的方向： ROS2 發送封包 → m_sockRos 收到 → FromRos2() 被呼叫 → m_sockNs3->SendTo() → ns-3 網路
-// 從 ns-3 到 ROS2 的方向： ns-3 網路回傳封包 → m_sockNs3 收到 → FromNs3() 被呼叫 → m_sockRos->SendTo() → ROS2 接收
-/*
-應用場景舉例
-假設有 STA（工作站） 和 AP（存取點）：
-在 STA 端：
-m_local: 監聽 *:9000（接收來自 ROS2 的資料）
-m_remote: 轉發到 AP_IP:5001（送往 AP）
-
-在 AP 端：
-m_local: 監聽 *:5001（接收來自 STA 的資料）
-m_remote: 轉發到 127.0.0.1:9999（送回本機 ROS2）*/
-// ===================== Ros2ProxyApp =====================
+////////
 class Ros2ProxyApp : public Application
 {
 public:
-  // ===== 初始化設定 =====
-  // local: 我要在哪個 port 接收封包（例如 STA:9000, AP:5001）
-  // remote: 我要把封包送到哪裡（例如 STA→AP, AP→ROS2 listener）
   void Setup(Address local, Address remote)
   {
     m_local = local;
     m_remote = remote;
+    m_localPort = InetSocketAddress::ConvertFrom(local).GetPort();
   }
 
 private:
-  // ===== 啟動時建立兩個 socket =====
+  // ====== ns-3 生命週期 ======
   virtual void StartApplication() override
   {
-    // (1) 綁定本地 socket，負責接收「從外部來的封包」
-    //   STA 模式時：ROS2 Talker → 這裡
-    //   AP 模式時：STA 經 Wi-Fi → 這裡
-    m_sockRos = Socket::CreateSocket(GetNode(), UdpSocketFactory::GetTypeId());
-    m_sockRos->Bind(m_local);
-    m_sockRos->SetRecvCallback(MakeCallback(&Ros2ProxyApp::FromRos2, this));
+    NS_LOG_UNCOND("[Ros2ProxyApp] StartApplication at t=" << Simulator::Now().GetSeconds());
 
-    // (2) 建立另一個 socket，負責「往對方送封包」
-    //   STA 模式：往 AP 送
-    //   AP 模式：往 ROS2 Listener 送
+    // 1) ns-3 這邊的 socket，用來往 AP / STA 送封包
     m_sockNs3 = Socket::CreateSocket(GetNode(), UdpSocketFactory::GetTypeId());
-    m_sockNs3->SetRecvCallback(MakeCallback(&Ros2ProxyApp::FromNs3, this));
-  }
-
-  // ===== 接收到 ROS2 (或外部) 封包時的行為 =====
-  // STA 模式：ROS2 Talker → STA proxy (這裡)
-  void FromRos2(Ptr<Socket> socket)
-  {
-    Address from;
-    Ptr<Packet> pkt = socket->RecvFrom(from);
-
-    // 在封包上打上 ns-3 模擬時間戳
-    MyTimestampTag t(Simulator::Now());
-    pkt->AddPacketTag(t);
-
-    // 把封包丟進 ns-3 模擬網路（往 AP proxy）
-    m_sockNs3->SendTo(pkt, 0, m_remote);
-  }
-
-  // ===== 接收到 ns-3 網路 (例如 AP 收 STA) 的封包時 =====
-  // AP 模式：STA → AP proxy (這裡)
-  void FromNs3(Ptr<Socket> socket)
-  {
-    Address from;
-    Ptr<Packet> pkt = socket->RecvFrom(from);
-
-    // 檢查封包是否有被打 timestamp tag
-    MyTimestampTag t;
-    if (pkt->PeekPacketTag(t))
+    if (m_localPort >= 5001 && m_localPort < 6000)
     {
-      // 計算模擬時間內的延遲（單純 ns-3 模擬時間差）
-      Time delay = Simulator::Now() - t.GetTime();
-
-      // 寫入 latency.csv
-      LatencyCsv() << Simulator::Now().GetSeconds()
-                   << "," << delay.GetSeconds()
-                   << "," << g_currentChannelWidth
-                   << "," << g_packetSize
-                   << ",b" << g_band
-                   << std::endl;
+        if (m_sockNs3->Bind(InetSocketAddress(Ipv4Address::GetAny(), m_localPort)) == 0)
+        {
+            NS_LOG_UNCOND("[Ros2ProxyApp] AP ns3 socket bound on port " << m_localPort);
+            m_sockNs3->SetRecvCallback(MakeCallback(&Ros2ProxyApp::FromNs3, this));
+        }
+        else
+        {
+            NS_LOG_UNCOND("[Ros2ProxyApp] ❌ AP bind failed on port " << m_localPort);
+        }
     }
 
-    // 將封包回送到 ROS2 listener (host 或容器)
-    m_sockRos->SendTo(pkt, 0, InetSocketAddress(Ipv4Address("127.0.0.1"), 9999));
+    // 2) 建 real world 的 Linux UDP socket，綁在 host: m_localPort
+    m_rosFd = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (m_rosFd < 0)
+    {
+      NS_LOG_UNCOND("[Ros2ProxyApp] ❌ socket() failed, errno=" << errno);
+      return;
+    }
+
+    // non-blocking
+    int flags = fcntl(m_rosFd, F_GETFL, 0);
+    fcntl(m_rosFd, F_SETFL, flags | O_NONBLOCK);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY); // 0.0.0.0
+    addr.sin_port = htons(m_localPort);
+
+    if (::bind(m_rosFd, (sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+      NS_LOG_UNCOND("[Ros2ProxyApp] ❌ bind() failed on port " << m_localPort
+                          << ", errno=" << errno);
+      ::close(m_rosFd);
+      m_rosFd = -1;
+      return;
+    }
+
+    NS_LOG_UNCOND("[Ros2ProxyApp] ✅ Linux UDP bound on 0.0.0.0:" << m_localPort);
+
+    m_running = true;
+    // 啟動輪詢 real socket 的迴圈（用 ns-3 的事件排程，不用 thread）
+    m_pollEvent = Simulator::Schedule(Seconds(0.0),
+                                      &Ros2ProxyApp::PollRosSocket, this);
   }
 
-  // ===== socket 變數 =====
-  Ptr<Socket> m_sockRos;   // 本地接收（ROS2方向）或回送用
-  Ptr<Socket> m_sockNs3;   // 模擬網路方向（ns-3網路內傳輸）
-  Address m_local;         // 我的接收端位址
-  Address m_remote;        // 我要送去的對端位址
+  virtual void StopApplication() override
+  {
+    NS_LOG_UNCOND("[Ros2ProxyApp] StopApplication at t=" << Simulator::Now().GetSeconds());
+    m_running = false;
+
+    if (m_pollEvent.IsRunning())
+    {
+      Simulator::Cancel(m_pollEvent);
+    }
+
+    if (m_sockNs3)
+    {
+      m_sockNs3->Close();
+      m_sockNs3 = nullptr;
+    }
+
+    if (m_rosFd >= 0)
+    {
+      ::close(m_rosFd);
+      m_rosFd = -1;
+    }
+  }
+
+  // ====== 輪詢 host ← ROS2 封包：從 Linux socket 收，丟進 ns-3 ======
+  void PollRosSocket()
+  {
+    if (!m_running || m_rosFd < 0)
+      return;
+
+    uint8_t buf[2048];
+    sockaddr_in src{};
+    socklen_t slen = sizeof(src);
+
+    while (true)
+    {
+      ssize_t n = ::recvfrom(m_rosFd, buf, sizeof(buf), 0,
+                             (sockaddr *)&src, &slen);
+      if (n < 0)
+      {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+          // no more data
+          break;
+        }
+        else
+        {
+          NS_LOG_UNCOND("[Ros2ProxyApp] recvfrom error, errno=" << errno);
+          break;
+        }
+      }
+
+      NS_LOG_UNCOND("[Ros2ProxyApp] FromRos2 (Linux) got " << n
+                       << " bytes at t=" << Simulator::Now().GetSeconds());
+
+      Ptr<Packet> pkt = Create<Packet>(buf, n);
+
+      // 打 tag
+      MyTimestampTag t(Simulator::Now());
+      pkt->AddPacketTag(t);
+
+      // 丟進 ns-3 網路 (STA -> AP)
+      m_sockNs3->SendTo(pkt, 0, m_remote);
+    }
+
+    // 再過一小段時間再來 poll 一次
+    m_pollEvent = Simulator::Schedule(Seconds(0.0005),
+                                      &Ros2ProxyApp::PollRosSocket, this);
+  }
+
+  // ====== ns-3 → ROS2  ======
+  void FromNs3(Ptr<Socket> socket)
+{
+  Address from;
+  Ptr<Packet> pkt = socket->RecvFrom(from);
+
+  // 1) 讀 timestamp tag、記錄延遲
+  MyTimestampTag t;
+  if (pkt->PeekPacketTag(t))
+  {
+    Time delay = Simulator::Now() - t.GetTime();
+    LatencyCsv() << Simulator::Now().GetSeconds()
+                 << "," << delay.GetSeconds()
+                 << "," << g_currentChannelWidth
+                 << "," << g_packetSize
+                 << ",b" << g_band
+                 << std::endl;
+
+    std::cout << "[Ros2ProxyApp][AP] FromNs3: got "
+              << pkt->GetSize()
+              << " bytes, delay=" << delay.GetSeconds()
+              << "s at t=" << Simulator::Now().GetSeconds()
+              << std::endl;
+  }
+  else
+  {
+    std::cout << "[Ros2ProxyApp][AP] FromNs3: got packet without timestamp tag, size="
+              << pkt->GetSize()
+              << " at t=" << Simulator::Now().GetSeconds()
+              << std::endl;
+  }
+
+  // 2) 把 ns-3 的 Packet payload 抽成 buffer
+  const uint32_t size = pkt->GetSize();
+  if (size == 0)
+  {
+    return;
+  }
+
+  std::vector<uint8_t> buf(size);
+  pkt->CopyData(buf.data(), size);
+
+  // 3) 用 Linux UDP 送回 Docker container 裡的 listener: 172.17.0.2:9999
+  int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd < 0)
+  {
+    perror("[Ros2ProxyApp][AP] socket");
+    return;
+  }
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(9999);              // listener 的 port
+  // ⚠ 這裡用現在 single-container 的 IP：172.17.0.2
+  // 之後你換成 k3s + hostNetwork，就可以改成 127.0.0.1
+  inet_pton(AF_INET, "172.17.0.2", &addr.sin_addr);
+
+  ssize_t sent = ::sendto(fd,
+                          buf.data(),
+                          size,
+                          0,
+                          reinterpret_cast<sockaddr*>(&addr),
+                          sizeof(addr));
+  if (sent < 0)
+  {
+    perror("[Ros2ProxyApp][AP] sendto");
+  }
+  else
+  {
+    std::cout << "[Ros2ProxyApp][AP] sendto listener: "
+              << sent << " bytes to 172.17.0.2:9999"
+              << std::endl;
+  }
+
+  ::close(fd);
+}
+
+
+  // ====== 成員變數 ======
+  Ptr<Socket> m_sockNs3;    // ns-3 world 的 socket
+  Address     m_local;
+  Address     m_remote;
+  uint16_t    m_localPort = 0;
+
+  int         m_rosFd = -1; // real Linux socket
+  bool        m_running = false;
+  EventId     m_pollEvent;
 };
+/////////////////////////////////////////////////// ////////
 
 
-// ==========================================================
-// Clock Publisher 
-/* ClockPublisherApp 是 ns-3 世界裡的一個「模擬時鐘廣播器」，
-    用 UDP 每隔固定時間發出 { "clock": 模擬時間 } 給 ROS2，
-    讓 ROS2 node 用 --use-sim-time 跟 ns-3 的時間軸對齊。*/
-// ==========================================================
+
+// 同步ns3 ros2時間
 class ClockPublisherApp : public Application
 {
 public:
@@ -185,7 +313,7 @@ private:
 
   void SendClock() 
   { //所以在 ROS2 端，只要跑一個 UDP receiver 監聽 13337，就能收到ns3 的clock
-    NS_LOG_UNCOND("[ClockPublisherApp] Send clock at " << Simulator::Now().GetSeconds());
+    //NS_LOG_UNCOND("[ClockPublisherApp] Send clock at " << Simulator::Now().GetSeconds());
     std::ostringstream ss;
     ss << "{ \"clock\": " << Simulator::Now().GetSeconds() << " }";
     Ptr<Packet> pkt = Create<Packet>((uint8_t *)ss.str().c_str(), ss.str().length());
@@ -199,9 +327,8 @@ private:
   Time m_interval;
 };
 
-// ==========================================================
+
 // 實驗主程式
-// ==========================================================
 void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, uint32_t nSta, double distance)
 {
   double simTime = 10.0;
@@ -243,7 +370,7 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
   mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
   NetDeviceContainer apDev = wifi.Install(phy, mac, apNode.Get(0));
 
-  mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(true));
+  mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(false));
   NetDeviceContainer staDevs = wifi.Install(phy, mac, staNodes);
 
   MobilityHelper mobility;
@@ -268,6 +395,9 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
   Ipv4InterfaceContainer apIf = address.Assign(apDev);
   Ipv4InterfaceContainer staIf = address.Assign(staDevs);
 
+  NS_LOG_UNCOND("STA: " << staIf.GetAddress(0));
+  NS_LOG_UNCOND("AP:  " << apIf.GetAddress(0));
+
   // === STA Proxies ===
   // 第 i 個 ROS2 Talker 應該把 UDP 封包送往 宿主機/容器對應的 STA_i 入口 9000+i
   // Ros2ProxyApp::FromRos2() 接到後，打上模擬時間戳，SendTo(AP_IP:5001+i) → 進 Wi-Fi 模擬通道。
@@ -287,16 +417,17 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
   //AP 端 Ros2ProxyApp::FromNs3() 收到封包後，會讀出先前的時間戳 → 用 Simulator::Now() 算出純模擬延遲 → 寫 latency.csv。
   //然後把封包轉送給 ROS2 Listener 的 UDP 埠 9999+i
   for (uint32_t i = 0; i < nSta; ++i)
-  {
-    Ptr<Ros2ProxyApp> proxyAp = CreateObject<Ros2ProxyApp>(); //為每個 STA 通道，在 AP 節點建立一個對應的 proxy（通道一一對應）
-    // AP 端在這個埠接收從 STA 經 Wi-Fi 模擬送來的封包 → 對應 STA 端剛才的 m_remote = (AP_IP:5001+i)
-    proxyAp->Setup(InetSocketAddress(Ipv4Address::GetAny(), 5001 + i),
-    // 把封包送回本地上的 ROS2 Listener（每條通道對應一個埠）。
-      // !!!!若 Listener 在 Docker 且非 host 網路，這裡要改成宿主/容器可達的 IP，不是 127.0.0.1
-                   InetSocketAddress(Ipv4Address("127.0.0.1"), 9999 + i));
-    apNode.Get(0)->AddApplication(proxyAp); // 把這個 AP proxy 掛到 AP 節點（唯一一個 AP，所以 Get(0)）
+{
+    Ptr<Ros2ProxyApp> proxyAp = CreateObject<Ros2ProxyApp>();
+    proxyAp->Setup(
+        InetSocketAddress(Ipv4Address::GetAny(), 5001 + i),
+        InetSocketAddress(Ipv4Address("172.17.0.2"), 9999 + i)
+    );
+
+    apNode.Get(0)->AddApplication(proxyAp);
     proxyAp->SetStartTime(Seconds(0.5 + 0.1 * i));
-  }
+}
+
 
   // === Clock Publisher === 
   // 把 ns-3 模擬時鐘送給 ROS2
@@ -305,7 +436,8 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
   apNode.Get(0)->AddApplication(clockApp);
   clockApp->SetStartTime(Seconds(0.1));
 
-  Simulator::Stop(Seconds(simTime));
+  //Simulator::Stop(Seconds(simTime));
+  Simulator::Stop(Time::Max());
   std::cout << "Before run, event count = " << Simulator::GetEventCount() << std::endl;
   Simulator::Run();
   Simulator::Destroy();
@@ -318,7 +450,7 @@ int main(int argc, char *argv[])
 {
   LogComponentEnable("Wifi7Proxy", LOG_LEVEL_INFO);
 
-  uint32_t nSta = 3;     // 3 talkers (you can increase this)
+  uint32_t nSta = 1;     // 3 talkers (you can increase this)
   double distance = 20.0;
   RunExperiment(1500, 80, 5, nSta, distance);
   return 0;
