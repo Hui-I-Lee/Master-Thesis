@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  listener0:
+    build: .
+    container_name: listener0
+    environment:
+      ROLE: "listener"
+      LISTEN_PORT: "9999"
+    network_mode: bridge
+
+  listener1:
+    build: .
+    container_name: listener1
+    environment:
+      ROLE: "listener"
+      LISTEN_PORT: "10000"
+    network_mode: bridge
+
+  talker0:
+    build: .
+    container_name: talker0
+    environment:
+      ROLE: "talker"
+      TARGET_PORT: "9000"
+    network_mode: bridge
+
+  talker1:
+    build: .
+    container_name: talker1
+    environment:
+      ROLE: "talker"
+      TARGET_PORT: "9001"
+    network_mode: bridge
+
