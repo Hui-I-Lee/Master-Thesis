@@ -137,7 +137,7 @@ private:
     NS_LOG_UNCOND("[Ros2ProxyApp] StopApplication at t=" << Simulator::Now().GetSeconds());
     m_running = false;
 
-    if (m_pollEvent.IsRunning())
+    if (m_pollEvent.IsPending())
     {
       Simulator::Cancel(m_pollEvent);
     }
@@ -251,12 +251,19 @@ private:
     return;
   }
 
+  // 從 m_remote 取出 IP 和 port
+  InetSocketAddress dst = InetSocketAddress::ConvertFrom(m_remote);
+  std::ostringstream oss;
+  dst.GetIpv4().Print(oss);   // ⭐ ns-3 官方推薦方法
+  std::string ip = oss.str();
+  uint16_t port = dst.GetPort();
+
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(9999);              // listener 的 port
+  addr.sin_port = htons(port);              // listener 的 port
   // ⚠ 這裡用現在 single-container 的 IP：172.17.0.2
   // 之後你換成 k3s + hostNetwork，就可以改成 127.0.0.1
-  inet_pton(AF_INET, "172.17.0.2", &addr.sin_addr);
+  inet_pton(AF_INET, ip.c_str(), &addr.sin_addr);
 
   ssize_t sent = ::sendto(fd,
                           buf.data(),
@@ -271,7 +278,7 @@ private:
   else
   {
     std::cout << "[Ros2ProxyApp][AP] sendto listener: "
-              << sent << " bytes to 172.17.0.2:9999"
+              << sent << " bytes to "<< ip << ":" << port
               << std::endl;
   }
 
@@ -331,7 +338,7 @@ private:
 // 實驗主程式
 void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, uint32_t nSta, double distance)
 {
-  double simTime = 10.0;
+  //double simTime = 10.0;
   g_currentChannelWidth = channelWidth;
   g_packetSize = packetSize;
   g_band = band;
@@ -416,18 +423,28 @@ void RunExperiment(uint32_t packetSize, uint32_t channelWidth, uint32_t band, ui
   // === AP Proxy ===
   //AP 端 Ros2ProxyApp::FromNs3() 收到封包後，會讀出先前的時間戳 → 用 Simulator::Now() 算出純模擬延遲 → 寫 latency.csv。
   //然後把封包轉送給 ROS2 Listener 的 UDP 埠 9999+i
+ std::vector<std::string> listenerIps = {
+    "172.17.0.2",  // listener0
+    "172.17.0.3"   // listener1
+ };
+
   for (uint32_t i = 0; i < nSta; ++i)
-{
+ {
     Ptr<Ros2ProxyApp> proxyAp = CreateObject<Ros2ProxyApp>();
-    proxyAp->Setup(
-        InetSocketAddress(Ipv4Address::GetAny(), 5001 + i),
-        InetSocketAddress(Ipv4Address("172.17.0.2"), 9999 + i)
+    // local: AP 這邊用 5001, 5002 收 STA → AP 的封包
+    InetSocketAddress local(Ipv4Address::GetAny(), 5001 + i);
+
+    // remote: 對應到「不同 listener container 的 IP:port」
+    InetSocketAddress remote(
+        Ipv4Address(listenerIps[i].c_str()),   // ⭐ 第 i 個 listener IP
+        9999 + i                               // ⭐ listener0 用 9999, listener1 用 10000
     );
+
+    proxyAp->Setup(local, remote);
 
     apNode.Get(0)->AddApplication(proxyAp);
     proxyAp->SetStartTime(Seconds(0.5 + 0.1 * i));
-}
-
+ }
 
   // === Clock Publisher === 
   // 把 ns-3 模擬時鐘送給 ROS2
@@ -450,7 +467,7 @@ int main(int argc, char *argv[])
 {
   LogComponentEnable("Wifi7Proxy", LOG_LEVEL_INFO);
 
-  uint32_t nSta = 1;     // 3 talkers (you can increase this)
+  uint32_t nSta = 2;     // 3 talkers (you can increase this)
   double distance = 20.0;
   RunExperiment(1500, 80, 5, nSta, distance);
   return 0;
